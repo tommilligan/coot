@@ -26,18 +26,32 @@ impl From<Reading> for Datum {
 }
 
 fn main() -> Result<()> {
-    let sensor = Sensor::open_default()?;
     loop {
-        match sensor.read() {
-            Ok(reading) => {
-                let datum: Datum = reading.into();
-                println!(
-                    "{}",
-                    ::serde_json::to_string(&datum).expect("Failed to serialize JSON")
-                );
+        // Acquire sensor. If we cant, wait for a bit then continue.
+        let sensor = match Sensor::open_default() {
+            Ok(sensor) => sensor,
+            Err(e) => {
+                eprintln!("Error acquiring sensor: {}", e);
+                thread::sleep(Duration::from_secs(5));
+                continue;
             }
-            Err(e) => eprintln!("{}", e),
+        };
+
+        loop {
+            match sensor.read() {
+                Ok(reading) => {
+                    let datum: Datum = reading.into();
+                    println!(
+                        "{}",
+                        ::serde_json::to_string(&datum).expect("Failed to serialize JSON")
+                    );
+                }
+                Err(e) => {
+                    eprintln!("{}", e);
+                    break;
+                }
+            }
+            thread::sleep(Duration::from_secs(5));
         }
-        thread::sleep(Duration::from_secs(5));
     }
 }
