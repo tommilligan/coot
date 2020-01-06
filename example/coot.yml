@@ -1,0 +1,3 @@
+influxdb:
+  url: Base64==
+  token: localhost:8086
