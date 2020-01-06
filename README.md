@@ -30,6 +30,8 @@ export ROOTFS=/home/tom/$PI_HOSTNAME/rootfs
 
 mkdir -p $ROOTFS
 rsync -vR --progress -rl --delete-after --safe-links pi@$PI_HOSTNAME:/{lib,usr,opt/vc/lib} $ROOTFS
+# Add a symlink here to match an expected filepath from libhidapi
+(cd /home/tom/dewberry/rootfs/usr/lib/arm-linux-gnueabihf; ln -s libhidapi-libusb.so.0 libhidapi-libusb.so)
 ```
 
 Compile the crate, pointing the linker to the correct locations for system libs.
