@@ -6,6 +6,9 @@ use co2mon::{Error as Co2monError, OpenOptions as SensorOptions, Reading, Sensor
 use config;
 use env_logger::Env;
 use log::{debug, error, warn};
+use reqwest::blocking::{Client, RequestBuilder};
+use reqwest::header::{HeaderMap, AUTHORIZATION};
+use reqwest::Url;
 use serde_derive::{Deserialize, Serialize};
 
 mod error;
@@ -17,6 +20,8 @@ pub struct Settings {
     interval: u64,
     influxdb_url: String,
     influxdb_token: String,
+    influxdb_bucket: String,
+    influxdb_org: String,
 }
 
 impl Settings {
@@ -38,7 +43,7 @@ impl Settings {
 pub struct Datum {
     temperature: f32,
     co2: u16,
-    timestamp: u128,
+    timestamp: u64,
 }
 
 impl From<Reading> for Datum {
@@ -49,7 +54,7 @@ impl From<Reading> for Datum {
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Time went backwards")
-                .as_millis(),
+                .as_secs(),
         }
     }
 }
@@ -97,10 +102,43 @@ impl Default for Data {
 fn run() -> Result<(), Error> {
     let settings = Settings::load()?;
 
+    let client = reqwest::blocking::Client::new();
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        format!("Token {}", &settings.influxdb_token)
+            .parse()
+            .map_err(|_| Error::User {
+                description: "Invalid InfluxDB token for Authorization header.".to_owned(),
+            })?,
+    );
+    let query: Vec<(&str, &str)> = vec![
+        ("org", &settings.influxdb_org),
+        ("bucket", &settings.influxdb_bucket),
+        ("precision", "s"),
+    ];
+
+    let url = Url::parse(&settings.influxdb_url)
+        .map_err(|_| Error::User {
+            description: format!("Invalid InfluxDB base url {}", &settings.influxdb_url),
+        })?
+        .join("api/v2/write")
+        .unwrap();
+
     let mut data = Data::default();
     loop {
         match data.read() {
             Ok(datum) => {
+                let response = client
+                    .post(url.clone())
+                    .headers(headers.clone())
+                    .query(&query)
+                    .body(format!(
+                        "{} c={},t={} {}",
+                        datum.timestamp, datum.co2, datum.temperature, datum.timestamp
+                    ))
+                    .send()?;
+                debug!("{}", response.text()?);
                 println!(
                     "{}",
                     ::serde_json::to_string(&datum).expect("Failed to serialize JSON")

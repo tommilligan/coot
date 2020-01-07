@@ -1,5 +1,6 @@
 use co2mon::Error as Co2monError;
 use config::ConfigError;
+use reqwest::Error as ReqwestError;
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
@@ -10,6 +11,12 @@ pub enum Error {
 
     #[snafu(display("Config error: {}", source))]
     Config { source: ConfigError },
+
+    #[snafu(display("Reqwest error: {}", source))]
+    Reqwest { source: ReqwestError },
+
+    #[snafu(display("User error: {}", description))]
+    User { description: String },
 }
 
 impl From<Co2monError> for Error {
@@ -21,5 +28,11 @@ impl From<Co2monError> for Error {
 impl From<ConfigError> for Error {
     fn from(source: ConfigError) -> Self {
         Error::Config { source }
+    }
+}
+
+impl From<ReqwestError> for Error {
+    fn from(source: ReqwestError) -> Self {
+        Error::Reqwest { source }
     }
 }
