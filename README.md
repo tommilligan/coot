@@ -4,23 +4,17 @@ CO2 IoT monitor.
 
 ## Cross-compiling with `raspi-toolchain`
 
-Setup `cargo` to use an external linker:
+### On the target device (Raspberry Pi 1, arm6)
 
-```toml
-# ~/.cargo/config.toml
-
-[target.arm-unknown-linux-gnueabihf]
-linker = "/opt/cross-pi-gcc/bin/arm-linux-gnueabihf-gcc"
-```
-
-Install the `raspi-toolchain` compiler.
+Install required system libs:
 
 ```bash
-cd /tmp
-wget https://github.com/Pro/raspi-toolchain/releases/latest/download/raspi-toolchain.tar.gz
-sudo tar xfz raspi-toolchain.tar.gz --strip-components=1 -C /opt
-rm /tmp/raspi-toolchain.tar.gz
+sudo apt-get install libhidapi-libusb0 libhidapi-dev libc
 ```
+
+### On the compiling machine
+
+#### Sync target libs
 
 Pull system libs from the target machine for linking:
 
@@ -33,6 +27,28 @@ rsync -vR --progress -rl --delete-after --safe-links pi@$PI_HOSTNAME:/{lib,usr,o
 # Add a symlink here to match an expected filepath from libhidapi
 (cd /home/tom/dewberry/rootfs/usr/lib/arm-linux-gnueabihf; ln -s libhidapi-libusb.so.0 libhidapi-libusb.so)
 ```
+
+#### Configure cross-compile toolchain
+
+Install the `raspi-toolchain` compiler.
+
+```bash
+cd /tmp
+wget https://github.com/Pro/raspi-toolchain/releases/latest/download/raspi-toolchain.tar.gz
+sudo tar xfz raspi-toolchain.tar.gz --strip-components=1 -C /opt
+rm /tmp/raspi-toolchain.tar.gz
+```
+
+Setup `cargo` to use an external linker:
+
+```toml
+# ~/.cargo/config.toml
+
+[target.arm-unknown-linux-gnueabihf]
+linker = "/opt/cross-pi-gcc/bin/arm-linux-gnueabihf-gcc"
+```
+
+#### Compile!
 
 Compile the crate, pointing the linker to the correct locations for system libs.
 
@@ -51,15 +67,15 @@ PKG_CONFIG_ALLOW_CROSS=1 cargo rustc --release --target arm-unknown-linux-gnueab
   -C link-arg=-Wl,-rpath-link,$ROOTFS/lib/$HOST
 ```
 
+> See example cmake file for complete list of linking locations: https://github.com/Pro/raspi-toolchain/blob/master/Toolchain-rpi.cmake
+
+#### Deploy
+
 Copy the output to the target machine.
 
 ```bash
 scp target/arm-unknown-linux-gnueabihf/debug/coot pi@dewberry:~
 ```
-
-Notes:
-
-- See example cmake file for complete list of linking locations: https://github.com/Pro/raspi-toolchain/blob/master/Toolchain-rpi.cmake
 
 ## Installation
 
@@ -74,6 +90,8 @@ sudo udevadm trigger
 ```
 
 ### Run
+
+Ensure you have a configuration file `coot.yml` in the working directory. See [example](./example) for a sample.
 
 Run like `./coot >> coot.jsonl 2>> coot.log`. Data will be output to `coot.jsonl` as well as uploaded to InfluxDB.
 
