@@ -6,7 +6,7 @@ use co2mon::{Error as Co2monError, OpenOptions as SensorOptions, Reading, Sensor
 use config;
 use env_logger::Env;
 use log::{debug, error, warn};
-use reqwest::blocking::{Client, RequestBuilder};
+use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
 use reqwest::Url;
 use serde_derive::{Deserialize, Serialize};
@@ -80,13 +80,18 @@ impl Data {
         if self.sensor.is_none() {
             self.sensor = Some(self.sensor_config.open()?);
         };
+
         let sensor = self
             .sensor
             .as_ref()
             .expect("Sensor must be Some as we just set it.");
 
-        // Then take a reading
-        sensor.read().map(|reading| reading.into())
+        // Then take a reading. If the reading fails, release the sensor so
+        // we try and reaquire it next time.
+        sensor.read().map(|reading| reading.into()).map_err(|e| {
+            self.sensor = None;
+            e
+        })
     }
 }
 
@@ -102,7 +107,7 @@ impl Default for Data {
 fn run() -> Result<(), Error> {
     let settings = Settings::load()?;
 
-    let client = reqwest::blocking::Client::new();
+    let client = Client::new();
     let mut headers = HeaderMap::new();
     headers.insert(
         AUTHORIZATION,
@@ -118,32 +123,38 @@ fn run() -> Result<(), Error> {
         ("precision", "s"),
     ];
 
-    let url = Url::parse(&settings.influxdb_url)
-        .map_err(|_| Error::User {
-            description: format!("Invalid InfluxDB base url {}", &settings.influxdb_url),
-        })?
-        .join("api/v2/write")
-        .unwrap();
+    let url = Url::parse(&settings.influxdb_url).map_err(|_| Error::User {
+        description: format!("Invalid InfluxDB base url {}", &settings.influxdb_url),
+    })?;
+    let url_write = url.join("api/v2/write").unwrap();
 
     let mut data = Data::default();
     loop {
         match data.read() {
             Ok(datum) => {
-                let response = client
-                    .post(url.clone())
-                    .headers(headers.clone())
-                    .query(&query)
-                    .body(format!(
-                        "{} c={},t={} {}",
-                        datum.timestamp, datum.co2, datum.temperature, datum.timestamp
-                    ))
-                    .send()?;
-                debug!("{}", response.text()?);
+                // First log out in json to stdout
+                // TODO convert this to a write trait
                 println!(
                     "{}",
                     ::serde_json::to_string(&datum).expect("Failed to serialize JSON")
                 );
+                let line_serialized = format!(
+                    "co2mon c={},t={} {}",
+                    datum.co2, datum.temperature, datum.timestamp
+                );
+                // Then, send the data to InfluxDB
+                let response = client
+                    .post(url_write.clone())
+                    .headers(headers.clone())
+                    .query(&query)
+                    .body(line_serialized)
+                    .send()?;
+                // If the api errors, log it and continue
+                if let Err(e) = response.error_for_status() {
+                    error!("{}", e);
+                }
             }
+            // There was an error taking the reading.
             Err(e) => warn!("{}", e),
         };
         thread::sleep(Duration::from_secs(settings.interval));
