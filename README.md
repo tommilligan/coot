@@ -118,3 +118,16 @@ You should set up log rotation like:
   copytruncate
 }
 ```
+
+## Other resources
+
+> TODO: pull these together to be more than just a tabdump
+
+- [Cross compile hidapi](https://www.raspberrypi.org/forums/viewtopic.php?t=143377)
+- [Run cross-compiled code on RPi Zero](https://www.reddit.com/r/rust/comments/9io0z8/run_crosscompiled_code_on_rpi_0/)
+- [Installing RPi cross-compiler toolchain on Linux x86_64](https://stackoverflow.com/questions/19162072/how-to-install-the-raspberry-pi-cross-compiler-on-my-linux-host-machine/58559140#58559140)
+- [RPi toolchain cmake](https://github.com/Pro/raspi-toolchain/blob/master/Toolchain-rpi.cmake)
+- [RPi toolchain gcc version mismatch](https://github.com/raspberrypi/tools/issues/102)
+- [GCC version not upgraded](https://github.com/raspberrypi/tools/issues/81)
+- [New/Recent RPi toolchain](https://github.com/Pro/raspi-toolchain)
+- [Cross compiling a toolchain from scratch](https://www.raspberrypi.org/forums/viewtopic.php?t=7493)
