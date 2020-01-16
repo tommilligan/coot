@@ -8,7 +8,7 @@ jobs:
       - run:
           name: install system dependencies
           command: |
-            sudo apt-get install -yq libhidapi-libusb0 libhidapi-dev libc
+            sudo apt-get install -yq libhidapi-libusb0 libhidapi-dev
       - restore_cache:
           keys:
             - cargo-cache-{{ arch }}-{{ checksum "Cargo.lock" }}-v1
