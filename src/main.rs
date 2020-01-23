@@ -27,7 +27,7 @@ pub struct Settings {
 
 impl Settings {
     pub fn load() -> Result<Self, config::ConfigError> {
-        debug!("Loading settings");
+        debug!("Loading settings.");
 
         let mut settings = config::Config::default();
         settings.set_default("interval", 5)?;
@@ -139,6 +139,7 @@ fn run() -> Result<(), Error> {
     })?;
     let url_write = url.join("api/v2/write").unwrap();
 
+    debug!("Taking readings...");
     let mut data = Data::default();
     loop {
         match data.read() {
