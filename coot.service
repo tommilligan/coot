@@ -1,0 +1,17 @@
+# systemd service for coot
+
+[Unit]
+Description=coot - CO2 logging
+After=network.target
+
+[Service]
+ExecStart=/home/pi/coot
+WorkingDirectory=/home/pi/
+StandardOutput=append:/home/pi/coot.jsonl
+StandardError=append:/home/pi/coot.log
+Restart=always
+User=pi
+Group=pi
+
+[Install]
+WantedBy=multi-user.target

@@ -83,7 +83,7 @@ scp target/arm-unknown-linux-gnueabihf/debug/coot pi@dewberry:~
 
 See guide on how to setup udev rules [here](https://github.com/lnicola/co2mon). Essentially:
 
-```
+```bash
 sudo echo 'ACTION=="add|change", SUBSYSTEMS=="usb", ATTRS{idVendor}=="04d9", ATTRS{idProduct}=="a052", MODE:="0666"' > /etc/udev/rules.d/60-co2mon.rules
 sudo udevadm control --reload
 sudo udevadm trigger
@@ -117,6 +117,22 @@ You should set up log rotation like:
   compress
   copytruncate
 }
+```
+
+### Running as a service
+
+If you want to run `coot` detached as a service, that will reboot when the pi does, you can copy the `coot.service` file in the repo:
+
+```bash
+sudo cp coot.service /etc/systemd/system/
+sudo systemctl enable coot
+sudo systemctl start coot
+```
+
+You can then monitor it's progress with:
+
+```bash
+sudo systemctl status coot
 ```
 
 ## Other resources
