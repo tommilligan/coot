@@ -1,8 +1,9 @@
+use std::convert::TryFrom;
 use std::thread;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use co2mon::{Error as Co2monError, OpenOptions as SensorOptions, Reading, Sensor};
+use co2mon::{OpenOptions as SensorOptions, Reading, Sensor};
 use config;
 use env_logger::Env;
 use log::{debug, error, warn};
@@ -46,16 +47,25 @@ pub struct Datum {
     timestamp: u64,
 }
 
-impl From<Reading> for Datum {
-    fn from(reading: Reading) -> Self {
-        Datum {
+impl TryFrom<Reading> for Datum {
+    type Error = Error;
+
+    fn try_from(reading: Reading) -> Result<Self, Error> {
+        let co2 = reading.co2();
+        if co2 < 300 {
+            return Err(Error::Data {
+                description: format!("CO2 out of sane range, was {}", co2),
+            });
+        };
+
+        Ok(Datum {
             temperature: reading.temperature(),
-            co2: reading.co2(),
+            co2,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Time went backwards")
                 .as_secs(),
-        }
+        })
     }
 }
 
@@ -75,7 +85,7 @@ impl Data {
         }
     }
 
-    fn read(&mut self) -> Result<Datum, Co2monError> {
+    fn read(&mut self) -> Result<Datum, Error> {
         // If we don't have an acquired sensor, get it
         if self.sensor.is_none() {
             self.sensor = Some(self.sensor_config.open()?);
@@ -88,10 +98,11 @@ impl Data {
 
         // Then take a reading. If the reading fails, release the sensor so
         // we try and reaquire it next time.
-        sensor.read().map(|reading| reading.into()).map_err(|e| {
+        let reading = sensor.read().map_err(|e| {
             self.sensor = None;
             e
-        })
+        })?;
+        Datum::try_from(reading)
     }
 }
 

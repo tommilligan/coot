@@ -12,6 +12,9 @@ pub enum Error {
     #[snafu(display("Config error: {}", source))]
     Config { source: ConfigError },
 
+    #[snafu(display("Data error: {}", description))]
+    Data { description: String },
+
     #[snafu(display("Reqwest error: {}", source))]
     Reqwest { source: ReqwestError },
 
