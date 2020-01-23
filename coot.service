@@ -9,6 +9,7 @@ ExecStart=/home/pi/coot
 WorkingDirectory=/home/pi/
 StandardOutput=append:/home/pi/coot.jsonl
 StandardError=append:/home/pi/coot.log
+Environment="RUST_LOG=coot=debug"
 Restart=always
 User=pi
 Group=pi
