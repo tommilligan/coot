@@ -11,7 +11,7 @@ co2mon = { version = "2.0.3", default-features = false, features = ["linux-share
 config = { version = "0.10.1", default-features = false, features = ["yaml"] }
 serde = "1.0.104"
 serde_derive = "1.0.104"
-serde_json = "1.0.50"
+serde_json = "1.0.51"
 log = "0.4.8"
 env_logger = "0.7.1"
 snafu = "0.6.2"
