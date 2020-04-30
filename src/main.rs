@@ -4,7 +4,6 @@ use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use co2mon::{OpenOptions as SensorOptions, Reading, Sensor};
-use config;
 use env_logger::Env;
 use log::{debug, error, warn};
 use reqwest::blocking::Client;
