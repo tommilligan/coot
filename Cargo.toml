@@ -9,7 +9,7 @@ co2mon = { version = "2.0.3", default-features = false, features = ["linux-share
 config = { version = "0.10.1", default-features = false, features = ["yaml"] }
 serde = "1.0.106"
 serde_derive = "1.0.106"
-serde_json = "1.0.51"
+serde_json = "1.0.54"
 log = "0.4.8"
 env_logger = "0.7.1"
 snafu = "0.6.7"
