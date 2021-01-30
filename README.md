@@ -6,9 +6,36 @@ CO2 IoT monitor.
 
 ### On the target device (Raspberry Pi 1, arm6)
 
+This guide assumes you are using an ARMv6 processor, which is found on:
+
+- Raspberry Pi 1
+- Raspberry Pi Zero W
+
+To confirm this is compatible with your device, check the `model name` of the CPU:
+
+```bash
+$ cat /proc/cpuinfo
+processor       : 0
+model name      : ARMv6-compatible processor rev 7 (v6l)
+BogoMIPS        : 697.95
+Features        : half thumb fastmult vfp edsp java tls
+CPU implementer : 0x41
+CPU architecture: 7
+CPU variant     : 0x0
+CPU part        : 0xb76
+CPU revision    : 7
+
+Hardware        : BCM2835
+Revision        : 9000c1
+Serial          : 000000004698d2d8
+Model           : Raspberry Pi Zero W Rev 1.1
+```
+
 Install required system libs:
 
 ```bash
+# note: you don't have to install libc on Raspberry Pi Zero W
+# it should already be installed by the system as libc6
 sudo apt-get install libhidapi-libusb0 libhidapi-dev libc
 ```
 
@@ -84,7 +111,7 @@ scp target/arm-unknown-linux-gnueabihf/debug/coot pi@dewberry:~
 See guide on how to setup udev rules [here](https://github.com/lnicola/co2mon). Essentially:
 
 ```bash
-sudo echo 'ACTION=="add|change", SUBSYSTEMS=="usb", ATTRS{idVendor}=="04d9", ATTRS{idProduct}=="a052", MODE:="0666"' > /etc/udev/rules.d/60-co2mon.rules
+echo 'ACTION=="add|change", SUBSYSTEMS=="usb", ATTRS{idVendor}=="04d9", ATTRS{idProduct}=="a052", MODE:="0666"' | sudo tee -a /etc/udev/rules.d/60-co2mon.rules
 sudo udevadm control --reload
 sudo udevadm trigger
 ```
