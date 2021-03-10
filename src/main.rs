@@ -13,7 +13,7 @@ use serde_derive::{Deserialize, Serialize};
 
 mod error;
 
-use error::Error;
+use error::{Error, Result};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Settings {
@@ -25,7 +25,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn load() -> Result<Self, config::ConfigError> {
+    pub fn load() -> Result<Self> {
         debug!("Loading settings.");
 
         let mut settings = config::Config::default();
@@ -39,7 +39,7 @@ impl Settings {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct Datum {
     temperature: f32,
     co2: u16,
@@ -49,7 +49,7 @@ pub struct Datum {
 impl TryFrom<Reading> for Datum {
     type Error = Error;
 
-    fn try_from(reading: Reading) -> Result<Self, Error> {
+    fn try_from(reading: Reading) -> Result<Self> {
         let co2 = reading.co2();
         if co2 < 300 {
             return Err(Error::Data {
@@ -84,7 +84,7 @@ impl Data {
         }
     }
 
-    fn read(&mut self) -> Result<Datum, Error> {
+    fn read(&mut self) -> Result<Datum> {
         // If we don't have an acquired sensor, get it
         if self.sensor.is_none() {
             self.sensor = Some(self.sensor_config.open()?);
@@ -114,29 +114,71 @@ impl Default for Data {
     }
 }
 
-fn run() -> Result<(), Error> {
+struct InfluxDBClient<'a> {
+    client: Client,
+    headers: HeaderMap,
+    query: Vec<(&'static str, &'a str)>,
+    url_write: Url,
+}
+
+impl<'a> InfluxDBClient<'a> {
+    fn new(client: Client, url: Url, token: &str, bucket: &'a str, org: &'a str) -> Result<Self> {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AUTHORIZATION,
+            format!("Token {}", &token)
+                .parse()
+                .map_err(|_| Error::User {
+                    description: "Invalid InfluxDB token for Authorization header.".to_owned(),
+                })?,
+        );
+        let query: Vec<(&str, &str)> = vec![("org", org), ("bucket", bucket), ("precision", "s")];
+
+        let url_write = url.join("api/v2/write").expect("invalid write path");
+
+        Ok(Self {
+            client,
+            headers,
+            query,
+            url_write,
+        })
+    }
+
+    fn write_datum(&self, datum: &Datum) -> Result<()> {
+        let request_builder = self
+            .client
+            .post(self.url_write.clone())
+            .headers(self.headers.clone())
+            .query(&self.query);
+
+        let line_serialized = format!(
+            "co2mon c={},t={} {}",
+            datum.co2, datum.temperature, datum.timestamp
+        );
+        // Then, send the data to InfluxDB
+        let response = request_builder.body(line_serialized).send()?;
+        // If the api errors, log it and continue
+        if let Err(e) = response.error_for_status() {
+            error!("{}", e);
+        }
+        Ok(())
+    }
+}
+
+fn run() -> Result<()> {
     let settings = Settings::load()?;
 
     let client = Client::new();
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        AUTHORIZATION,
-        format!("Token {}", &settings.influxdb_token)
-            .parse()
-            .map_err(|_| Error::User {
-                description: "Invalid InfluxDB token for Authorization header.".to_owned(),
-            })?,
-    );
-    let query: Vec<(&str, &str)> = vec![
-        ("org", &settings.influxdb_org),
-        ("bucket", &settings.influxdb_bucket),
-        ("precision", "s"),
-    ];
-
     let url = Url::parse(&settings.influxdb_url).map_err(|_| Error::User {
         description: format!("Invalid InfluxDB base url {}", &settings.influxdb_url),
     })?;
-    let url_write = url.join("api/v2/write").unwrap();
+    let influxdb_client = InfluxDBClient::new(
+        client,
+        url,
+        &settings.influxdb_token,
+        &settings.influxdb_bucket,
+        &settings.influxdb_org,
+    )?;
 
     debug!("Taking readings...");
     let mut data = Data::default();
@@ -149,21 +191,7 @@ fn run() -> Result<(), Error> {
                     "{}",
                     ::serde_json::to_string(&datum).expect("Failed to serialize JSON")
                 );
-                let line_serialized = format!(
-                    "co2mon c={},t={} {}",
-                    datum.co2, datum.temperature, datum.timestamp
-                );
-                // Then, send the data to InfluxDB
-                let response = client
-                    .post(url_write.clone())
-                    .headers(headers.clone())
-                    .query(&query)
-                    .body(line_serialized)
-                    .send()?;
-                // If the api errors, log it and continue
-                if let Err(e) = response.error_for_status() {
-                    error!("{}", e);
-                }
+                influxdb_client.write_datum(&datum)?;
             }
             // There was an error taking the reading.
             Err(e) => warn!("{}", e),
@@ -177,4 +205,62 @@ fn main() {
     debug!("Initialised logger.");
 
     run().unwrap_or_else(|e| error!("{}", e));
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use mockito::mock;
+
+    fn mock_influxdb_client() -> Result<InfluxDBClient<'static>> {
+        let url = &mockito::server_url();
+        let client = Client::new();
+        InfluxDBClient::new(
+            client,
+            url.parse().expect("invalid mockito url"),
+            "supersecrettoken",
+            "test-bucket",
+            "test-org",
+        )
+    }
+
+    #[test]
+    fn test_write_success() -> Result<()> {
+        let client = mock_influxdb_client()?;
+
+        let mock_hello = mock(
+            "POST",
+            "/api/v2/write?org=test-org&bucket=test-bucket&precision=s",
+        )
+        .match_header("authorization", "Token supersecrettoken")
+        .match_body("co2mon c=400,t=21.3 123456789")
+        .with_status(200)
+        .create();
+
+        client.write_datum(&Datum {
+            temperature: 21.3,
+            co2: 400,
+            timestamp: 123456789,
+        })?;
+
+        mock_hello.assert();
+        Ok(())
+    }
+
+    /// On failure to write to the InfluxDB api, we should continue without error
+    #[test]
+    fn test_write_fail_continues() -> Result<()> {
+        let client = mock_influxdb_client()?;
+
+        let mock_hello = mock(
+            "POST",
+            "/api/v2/write?org=test-org&bucket=test-bucket&precision=s",
+        )
+        .with_status(500)
+        .create();
+        client.write_datum(&Datum::default())?;
+
+        mock_hello.assert();
+        Ok(())
+    }
 }
